@@ -188,6 +188,13 @@
       .btn-del { background: transparent; color: var(--dim); border: 1px solid #333; padding: 5px 10px; font-size: 10px;}
       .btn-del:hover { border-color: var(--alert); color: var(--alert); }
 
+      /* HELP SECTION */
+      .help-step { margin-bottom: 30px; padding-left: 20px; border-left: 2px solid #333; }
+      .help-step h3 { font-size: 16px; margin: 0 0 10px 0; color: var(--text); }
+      .help-step p { color: var(--dim); font-size: 13px; line-height: 1.5; margin: 0 0 10px 0; }
+      .code-block { background: #111; padding: 15px; border: 1px solid #222; font-family: 'JetBrains Mono'; font-size: 12px; color: #aaa; overflow-x: auto; white-space: pre-wrap; margin-top: 10px; }
+      .important { color: var(--alert); font-weight: bold; }
+
       /* ACTIVE DECK */
       .deck-grid { display: grid; gap: 20px; margin-bottom: 40px; }
       
@@ -238,6 +245,7 @@
       <div class="nav-item" onclick="nav('logs')">SPENT LOGS</div>
       <div class="nav-item" onclick="nav('ingest')">INGEST SPOOL</div>
       <div class="nav-item" onclick="nav('settings')">SETTINGS</div>
+      <div class="nav-item" onclick="nav('help')">HELP / SETUP</div>
 
       <!-- SEARCH INVENTORY (Moved to Sidebar) -->
       <div class="sidebar-search">
@@ -381,6 +389,139 @@
               <button class="btn btn-sm" onclick="addConf('colors')">+</button>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- VIEW 6: HELP & SETUP -->
+      <div id="view-help" class="view">
+        <div class="header-l">DEPLOYMENT PROTOCOL</div>
+        <p style="color:var(--dim); margin-bottom:30px;">Follow these steps to connect Infinite Shelf to your Google Sheet database.</p>
+
+        <div class="help-step">
+            <h3>STEP 1: CREATE GOOGLE SHEET</h3>
+            <p>Create a new blank Google Sheet. Copy the <strong>Spreadsheet ID</strong> from the URL (the long string between /d/ and /edit).</p>
+        </div>
+
+        <div class="help-step">
+            <h3>STEP 2: OPEN SCRIPT EDITOR</h3>
+            <p>In your Google Sheet, go to <strong>Extensions > Apps Script</strong>.</p>
+        </div>
+
+        <div class="help-step">
+            <h3>STEP 3: PASTE BACKEND CODE</h3>
+            <p>Delete any code in <code>Code.gs</code> and paste the code below. <br><span class="important">IMPORTANT:</span> Paste your Spreadsheet ID into the top line of the code.</p>
+            <button class="btn btn-sm" onclick="copyCode()">COPY CODE TO CLIPBOARD</button>
+            <textarea id="backend-code" style="width:1px; height:1px; opacity:0; position:absolute;">
+// --- CONFIGURATION ---
+const SPREADSHEET_ID = "PASTE_YOUR_ID_HERE"; 
+const SHEET_INV = "Inventory_Log";
+const SHEET_CONFIG = "Config_Data";
+
+function setupDatabase() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  let sheetInv = ss.getSheetByName(SHEET_INV);
+  if (!sheetInv) {
+    sheetInv = ss.insertSheet(SHEET_INV);
+    const headers = ["UUID", "Brand", "Material", "Color", "Status", "Initial_Weight_g", "Current_Weight_g", "Purchase_Price", "Date_Added", "Last_Updated"];
+    sheetInv.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+    sheetInv.setFrozenRows(1);
+  }
+  let sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+  if (!sheetConfig) {
+    sheetConfig = ss.insertSheet(SHEET_CONFIG);
+    const headers = ["Brands", "Materials", "Colors"];
+    sheetConfig.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold");
+    sheetConfig.setFrozenRows(1);
+    sheetConfig.getRange(2, 1, 3, 3).setValues([["BambuLab", "PLA", "Black"],["Prusament", "PETG", "White"],["eSun", "ABS", "Orange"]]);
+  }
+}
+
+function doOptions(e) { return ContentService.createTextOutput("").setMimeType(ContentService.MimeType.TEXT); }
+function doGet(e) { return createCorsResponse(getAppData()); }
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents);
+    if (payload.action === 'addSpool') addSpool(payload.data);
+    else if (payload.action === 'batchAddSpools') batchAddSpools(payload.data);
+    else if (payload.action === 'updateSpool') updateSpool(payload.data.uuid, payload.data.weight, payload.data.status);
+    else if (payload.action === 'deleteSpool') deleteSpool(payload.data.uuid);
+    else if (payload.action === 'batchDeleteSpools') batchDeleteSpools(payload.data);
+    else if (payload.action === 'addConfig') addConfigItem(payload.data.type, payload.data.value);
+    else if (payload.action === 'removeConfig') removeConfigItem(payload.data.type, payload.data.value);
+    return createCorsResponse({ status: "success" });
+  } catch (error) { return createCorsResponse({ status: "error", message: error.toString() }); }
+}
+
+function createCorsResponse(data) { return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON); }
+
+function getAppData() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheetInv = ss.getSheetByName(SHEET_INV);
+  const dataInv = sheetInv.getDataRange().getValues(); dataInv.shift();
+  const inventory = dataInv.map(row => ({ uuid: row[0], brand: row[1], material: row[2], color: row[3], status: row[4], initial_weight: row[5], current_weight: row[6], price: row[7], date_added: row[8] }));
+  const sheetConfig = ss.getSheetByName(SHEET_CONFIG);
+  const lastRow = Math.max(sheetConfig.getLastRow(), 1);
+  const brands = sheetConfig.getRange("A2:A" + lastRow).getValues().flat().filter(String);
+  const materials = sheetConfig.getRange("B2:B" + lastRow).getValues().flat().filter(String);
+  const colors = sheetConfig.getRange("C2:C" + lastRow).getValues().flat().filter(String);
+  return { inventory, config: { brands, materials, colors } };
+}
+
+function addSpool(obj) {
+  SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_INV).appendRow([obj.uuid, obj.brand, obj.material, obj.color, obj.status, obj.initial_weight, obj.current_weight, obj.price, obj.date_added, new Date()]);
+}
+function batchAddSpools(arr) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_INV);
+  const rows = arr.map(obj => [obj.uuid, obj.brand, obj.material, obj.color, obj.status, obj.initial_weight, obj.current_weight, obj.price, obj.date_added, new Date()]);
+  sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, rows[0].length).setValues(rows);
+}
+function updateSpool(uuid, weight, status) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_INV);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0] == uuid) { sheet.getRange(i + 1, 7).setValue(weight); sheet.getRange(i + 1, 5).setValue(status); sheet.getRange(i + 1, 10).setValue(new Date()); break; }
+  }
+}
+function deleteSpool(uuid) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_INV);
+  const data = sheet.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) { if (data[i][0] == uuid) { sheet.deleteRow(i + 1); break; } }
+}
+function batchDeleteSpools(data) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_INV);
+  const rows = sheet.getDataRange().getValues(); const headers = rows.shift();
+  const newRows = rows.filter(r => !data.uuids.includes(String(r[0])));
+  sheet.clearContents(); sheet.appendRow(headers);
+  if(newRows.length) sheet.getRange(2,1,newRows.length,newRows[0].length).setValues(newRows);
+}
+function addConfigItem(type, value) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_CONFIG);
+  let col = type === 'materials' ? 2 : type === 'colors' ? 3 : 1;
+  const lastRow = sheet.getLastRow() + 50; const values = sheet.getRange(1, col, lastRow).getValues().flat();
+  let nextRow = values.findIndex(v => v === "") + 1; if (nextRow === 0) nextRow = lastRow + 1;
+  sheet.getRange(nextRow, col).setValue(value);
+}
+function removeConfigItem(type, value) {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SHEET_CONFIG);
+  let col = type === 'materials' ? 2 : type === 'colors' ? 3 : 1;
+  const values = sheet.getRange(1, col, sheet.getLastRow()).getValues().flat();
+  const rowIndex = values.findIndex(v => v == value); if (rowIndex > -1) sheet.getRange(rowIndex + 1, col).clearContent();
+}
+            </textarea>
+        </div>
+
+        <div class="help-step">
+            <h3>STEP 4: DEPLOY AS WEB APP</h3>
+            <p>1. Click <strong>Deploy > New Deployment</strong>.</p>
+            <p>2. Select type: <strong>Web app</strong>.</p>
+            <p>3. Execute as: <strong>Me</strong>.</p>
+            <p class="important">4. Who has access: ANYONE (Crucial!).</p>
+            <p>5. Click Deploy.</p>
+        </div>
+
+        <div class="help-step">
+            <h3>STEP 5: CONNECT</h3>
+            <p>Copy the <strong>Web App URL</strong> (ends in <code>/exec</code>) and paste it into the SETTINGS tab of this app.</p>
         </div>
       </div>
 
@@ -808,6 +949,15 @@
       function saveApiUrl() { state.settings.apiUrl = document.getElementById('set-api-url').value; saveLocalData(); updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE"); }
       function updateDeckSize() { state.deckSize = parseInt(document.getElementById('set-deck-size').value); saveLocalData(); }
       function forceSync() { const url = state.settings.apiUrl; if(!url) return alert("Enter URL"); updateStatus("SYNCING..."); fetch(url).then(res => res.json()).then(d => { state.inventory=d.inventory; state.config=d.config; saveLocalData(); updateStatus("SYNC COMPLETE"); }).catch(e => { updateStatus("SYNC FAILED"); alert("Check URL/Permissions"); }); }
+
+      // --- HELPERS ---
+      function copyCode() {
+        const copyText = document.getElementById("backend-code");
+        copyText.select();
+        copyText.setSelectionRange(0, 99999); 
+        document.execCommand("copy");
+        alert("Code copied to clipboard!");
+      }
 
       // --- UI HELPERS ---
       function nav(viewName) {
