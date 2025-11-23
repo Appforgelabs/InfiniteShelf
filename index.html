@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Infinite Shelf</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --sidebar: #111;
+        --card: #161616;
+        --border: #333;
+        --text: #e0e0e0;
+        --dim: #666;
+        --accent: #00ff41; 
+        --alert: #ff4d00;
+        --blue: #00a8ff;
+        --gold: #ffd700;
+      }
+      
+      * { box-sizing: border-box; }
+      
+      body {
+        background-color: var(--bg);
+        color: var(--text);
+        font-family: 'Inter', sans-serif;
+        margin: 0;
+        display: flex;
+        height: 100vh;
+        overflow: hidden;
+      }
+
+      /* --- SIDEBAR --- */
+      .sidebar {
+        width: 220px;
+        background: var(--sidebar);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        padding: 20px;
+        flex-shrink: 0;
+        position: relative;
+      }
+      
+      .logo {
+        font-family: 'JetBrains Mono', monospace;
+        font-weight: 700;
+        margin-bottom: 30px;
+        letter-spacing: -1px;
+        border-left: 3px solid var(--accent);
+        padding-left: 10px;
+      }
+
+      .status-ind {
+        font-size: 10px; color: var(--dim); margin-bottom: 20px; font-family: 'JetBrains Mono';
+        height: 15px;
+      }
+
+      .nav-item {
+        color: var(--dim);
+        padding: 12px 10px;
+        margin-bottom: 5px;
+        cursor: pointer;
+        border-radius: 4px;
+        font-size: 14px;
+        transition: 0.2s;
+      }
+      .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+      .nav-item.active { background: var(--card); color: var(--accent); border: 1px solid var(--border); }
+
+      /* SIDEBAR SEARCH */
+      .sidebar-search {
+        margin-top: 10px;
+        padding-top: 10px;
+        border-top: 1px solid #222;
+      }
+      .sidebar-search input {
+        background: #000;
+        border: 1px solid #333;
+        color: var(--text);
+        padding: 8px;
+        width: 100%;
+        font-family: 'JetBrains Mono';
+        font-size: 12px;
+        border-radius: 4px;
+        outline: none;
+      }
+      .sidebar-search input:focus { border-color: var(--accent); }
+
+      /* UNDO / REDO CONTROLS */
+      .undo-controls {
+        margin-top: auto;
+        display: flex;
+        gap: 10px;
+        padding-top: 20px;
+        border-top: 1px solid #222;
+      }
+      .undo-btn {
+        flex: 1;
+        background: #222;
+        border: 1px solid #333;
+        color: var(--dim);
+        padding: 8px;
+        cursor: pointer;
+        font-family: 'JetBrains Mono';
+        font-size: 12px;
+        text-align: center;
+        border-radius: 4px;
+        user-select: none;
+      }
+      .undo-btn:hover { color: var(--text); border-color: var(--accent); }
+      .undo-btn.disabled { opacity: 0.3; cursor: default; border-color: #333; pointer-events: none; }
+
+      /* --- MAIN CONTENT --- */
+      .main {
+        flex: 1;
+        padding: 30px;
+        overflow-y: auto;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+      }
+
+      /* VIEWS */
+      .view { display: none; animation: fadeIn 0.2s ease; flex: 1; overflow-y: auto;}
+      .view.active { display: block; }
+      @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+      /* GRID & CARDS */
+      .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+      
+      .card {
+        background: var(--card);
+        border: 1px solid var(--border);
+        padding: 20px;
+        border-radius: 4px;
+        position: relative;
+      }
+      .card-highlight { border-top: 2px solid var(--accent); }
+      .card-partial { border-top: 2px solid var(--blue); }
+
+      /* TYPOGRAPHY */
+      .mono { font-family: 'JetBrains Mono', monospace; }
+      .header-l { font-size: 24px; font-weight: 600; margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+      .header-s { font-size: 12px; color: var(--dim); text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; }
+      .stat-val { font-size: 18px; font-weight: bold; font-family: 'JetBrains Mono'; }
+
+      /* FORMS & INPUTS */
+      .form-group { margin-bottom: 20px; max-width: 500px; }
+      label { display: block; font-size: 12px; color: var(--dim); margin-bottom: 8px; }
+      input, select {
+        background: #000; border: 1px solid #333; color: white;
+        padding: 10px; width: 100%; font-family: 'JetBrains Mono';
+        outline: none; font-size: 13px;
+      }
+      input:focus, select:focus { border-color: var(--accent); }
+
+      /* BULK INGEST TABLE */
+      .ingest-row {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr 1.5fr 0.8fr 0.5fr 0.8fr; /* Brand, Mat, Col, Price, Qty, Actions */
+        gap: 10px;
+        margin-bottom: 10px;
+        align-items: center;
+        background: #111;
+        padding: 10px;
+        border: 1px solid #222;
+        border-radius: 4px;
+      }
+      .ingest-header {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr 1.5fr 0.8fr 0.5fr 0.8fr;
+        gap: 10px;
+        margin-bottom: 10px;
+        font-size: 10px; color: var(--dim); text-transform: uppercase; letter-spacing: 1px;
+        padding: 0 10px;
+      }
+
+      /* BUTTONS */
+      .btn {
+        background: #333; border: none; color: white;
+        padding: 10px 20px; cursor: pointer; font-family: 'JetBrains Mono';
+        margin-top: 10px; transition: 0.2s; text-align: center;
+      }
+      .btn:hover { background: var(--accent); color: black; }
+      .btn-sm { padding: 5px 10px; font-size: 10px; margin: 0; }
+      .btn-icon { padding: 8px; display: flex; align-items: center; justify-content: center; }
+      .btn-del { background: transparent; color: var(--dim); border: 1px solid #333; padding: 5px 10px; font-size: 10px;}
+      .btn-del:hover { border-color: var(--alert); color: var(--alert); }
+
+      /* ACTIVE DECK */
+      .deck-grid { display: grid; gap: 20px; margin-bottom: 40px; }
+      
+      .slot { height: 180px; display: flex; flex-direction: column; justify-content: space-between; border: 1px dashed #333; padding: 15px; }
+      .slot.active { border: 1px solid #444; border-top: 2px solid var(--accent); background: var(--card); }
+      .slot.low-stock { border-top: 2px solid var(--alert); }
+      
+      .progress-bg { height: 4px; background: #333; margin: 10px 0; }
+      .progress-fill { height: 100%; background: var(--accent); width: 0%; transition: width 0.5s; }
+      .low-stock .progress-fill { background: var(--alert); }
+
+      /* TABLE */
+      .data-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      .data-table th { text-align: left; color: var(--dim); font-size: 12px; border-bottom: 1px solid var(--border); padding: 8px; }
+      .data-table td { border-bottom: 1px solid #222; padding: 8px; font-family: 'JetBrains Mono'; font-size: 13px; color: var(--dim); }
+      .data-table tr:hover td { color: var(--text); background: rgba(255,255,255,0.02); }
+
+      /* STACK OVERLAY */
+      .stack-overlay {
+        position: absolute; top:0; left:0; width:100%; height:100%;
+        background: var(--card); z-index: 10; padding: 15px;
+        display: none; flex-direction: column;
+      }
+      .stack-overlay.show { display: flex; }
+      .stack-item { display: flex; justify-content: space-between; border-bottom: 1px solid #222; padding: 8px 0; font-size: 12px; }
+
+      /* LOADING */
+      #loader {
+        position: fixed; top:0; left:0; width:100%; height:100%;
+        background: var(--bg); z-index: 999;
+        display: flex; justify-content: center; align-items: center;
+        font-family: 'JetBrains Mono';
+      }
+    </style>
+  </head>
+  <body>
+    
+    <!-- LOADER (Only for initial load) -->
+    <div id="loader">INITIALIZING SYSTEM...</div>
+
+    <!-- SIDEBAR -->
+    <nav class="sidebar">
+      <div class="logo">INFINITE<br>SHELF</div>
+      <div id="status-indicator" class="status-ind">LOCAL MODE</div>
+      
+      <div class="nav-item active" onclick="nav('dashboard')">DASHBOARD</div>
+      <div class="nav-item" onclick="nav('finance')">FINANCIALS</div>
+      <div class="nav-item" onclick="nav('logs')">SPENT LOGS</div>
+      <div class="nav-item" onclick="nav('ingest')">INGEST SPOOL</div>
+      <div class="nav-item" onclick="nav('settings')">SETTINGS</div>
+
+      <!-- SEARCH INVENTORY (Moved to Sidebar) -->
+      <div class="sidebar-search">
+        <input type="text" id="search-bar" placeholder="SEARCH..." oninput="handleSearch(this.value)">
+      </div>
+
+      <!-- UNDO/REDO -->
+      <div class="undo-controls">
+        <div id="btn-undo" class="undo-btn disabled" onclick="triggerUndo()">UNDO</div>
+        <div id="btn-redo" class="undo-btn disabled" onclick="triggerRedo()">REDO</div>
+      </div>
+    </nav>
+
+    <!-- MAIN AREA -->
+    <main class="main">
+
+      <!-- VIEW 1: DASHBOARD -->
+      <div id="view-dashboard" class="view active">
+        <div class="header-l flex" style="justify-content: space-between; align-items: center;">
+          <div>OVERVIEW <span class="mono" style="font-size:14px; margin-left:15px; color:var(--dim)">INV: $<span id="m-val">0</span> | <span id="m-mass">0</span>kg</span></div>
+        </div>
+
+        <div class="header-s">ACTIVE DECK</div>
+        <div class="deck-grid" id="active-deck"></div>
+
+        <div class="header-s">WAREHOUSE (STACKED)</div>
+        <div class="grid" id="warehouse-grid"></div>
+      </div>
+
+      <!-- VIEW 2: FINANCIALS -->
+      <div id="view-finance" class="view">
+        <div class="header-l">FINANCIAL INTELLIGENCE</div>
+        <div class="grid" style="margin-bottom: 30px;">
+            <div class="card">
+                <div class="header-s">LIFETIME SPEND</div>
+                <div class="stat-val" style="color: var(--gold)">$<span id="fin-total-spend">0.00</span></div>
+            </div>
+            <div class="card">
+                <div class="header-s">CURRENT ASSETS</div>
+                <div class="stat-val">$<span id="fin-current-val">0.00</span></div>
+            </div>
+            <div class="card">
+                <div class="header-s">SPOOLS CONSUMED</div>
+                <div class="stat-val mono"><span id="fin-consumed">0</span></div>
+            </div>
+        </div>
+        <div class="header-s">MONTHLY BREAKDOWN</div>
+        <div class="card" style="padding: 0;">
+            <table class="data-table">
+                <thead><tr><th>MONTH</th><th>SPENT</th><th>KG ADDED</th></tr></thead>
+                <tbody id="finance-table"></tbody>
+            </table>
+        </div>
+      </div>
+
+      <!-- VIEW 3: LOGS -->
+      <div id="view-logs" class="view">
+        <div class="header-l">SPENT SPOOL ARCHIVE</div>
+        <div class="card" style="padding: 0;">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>DATE ADDED</th>
+                        <th>BRAND</th>
+                        <th>MATERIAL</th>
+                        <th>COLOR</th>
+                        <th>PRICE</th>
+                    </tr>
+                </thead>
+                <tbody id="logs-table"></tbody>
+            </table>
+        </div>
+      </div>
+
+      <!-- VIEW 4: BULK INGEST (REDESIGNED) -->
+      <div id="view-ingest" class="view">
+        <div class="header-l flex" style="justify-content:space-between">
+            <span>MASS INGEST MANIFEST</span>
+            <button class="btn btn-sm" style="background:var(--accent); color:black; margin:0;" onclick="submitBulkIngest()">SUBMIT ALL</button>
+        </div>
+        
+        <div class="ingest-header">
+            <div>BRAND</div>
+            <div>MATERIAL</div>
+            <div>COLOR</div>
+            <div>PRICE ($)</div>
+            <div>QTY</div>
+            <div>ACTIONS</div>
+        </div>
+        
+        <div id="ingest-rows-container">
+            <!-- Dynamic Rows Here -->
+        </div>
+
+        <button class="btn" style="width:100%; border:1px dashed #333; background:transparent; color:var(--dim);" onclick="addIngestRow()">+ ADD ROW</button>
+      </div>
+
+      <!-- VIEW 5: SETTINGS -->
+      <div id="view-settings" class="view">
+        <div class="header-l">SYSTEM CONFIGURATION</div>
+        
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="header-s">DATA SOURCE</div>
+            <div class="form-group">
+                <label>GOOGLE APPS SCRIPT WEB APP URL</label>
+                <input type="text" id="set-api-url" placeholder="https://script.google.com/macros/s/..." onchange="saveApiUrl()">
+            </div>
+            <button class="btn btn-sm" onclick="forceSync()">TEST & SYNC NOW</button>
+        </div>
+
+        <div class="card" style="margin-bottom: 20px;">
+            <div class="header-s">SYSTEM PREFERENCES</div>
+            <div class="form-group">
+                <label>ACTIVE DECK SLOTS</label>
+                <div style="display:flex; gap:10px;">
+                    <input type="number" id="set-deck-size" min="1" max="12" style="width:80px">
+                    <button class="btn btn-sm" onclick="updateDeckSize()">SAVE</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+          <div class="card">
+            <div class="header-s">BRANDS</div><div id="list-brands"></div>
+            <div style="margin-top:10px; display:flex; gap:5px;">
+              <input type="text" id="add-brands-val" placeholder="New Brand">
+              <button class="btn btn-sm" onclick="addConf('brands')">+</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="header-s">MATERIALS</div><div id="list-materials"></div>
+            <div style="margin-top:10px; display:flex; gap:5px;">
+              <input type="text" id="add-materials-val" placeholder="New Material">
+              <button class="btn btn-sm" onclick="addConf('materials')">+</button>
+            </div>
+          </div>
+           <div class="card">
+            <div class="header-s">COLORS</div><div id="list-colors"></div>
+            <div style="margin-top:10px; display:flex; gap:5px;">
+              <input type="text" id="add-colors-val" placeholder="New Color">
+              <button class="btn btn-sm" onclick="addConf('colors')">+</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </main>
+
+    <script>
+      // --- STATE & HISTORY ---
+      const defaultState = {
+        inventory: [
+            {uuid: '101', brand: 'BambuLab', material: 'PLA', color: 'Black', status: 'Active', initial_weight: 1000, current_weight: 850, price: 25.00, date_added: new Date().toISOString()},
+            {uuid: '102', brand: 'Prusament', material: 'PETG', color: 'Orange', status: 'Active', initial_weight: 1000, current_weight: 450, price: 30.00, date_added: new Date().toISOString()}
+        ],
+        config: { brands: ['BambuLab','eSun', 'Prusament'], materials: ['PLA','PETG', 'ABS', 'TPU'], colors: ['Black','White','Orange','Red'] },
+        deckSize: 4,
+        settings: { apiUrl: '' }
+      };
+
+      let state = defaultState;
+      let searchQuery = "";
+      let historyStack = [];
+      let futureStack = [];
+
+      // --- INIT ---
+      window.onload = () => {
+        loadLocalData();
+        addIngestRow(); // Start with one row
+        renderAll();
+        document.getElementById('loader').style.display = 'none';
+        if(state.settings.apiUrl) forceSync();
+        updateUndoUI();
+      };
+
+      // --- DATA MANAGER ---
+      function loadLocalData() {
+        const stored = localStorage.getItem('infinite_shelf_db');
+        if(stored) state = JSON.parse(stored);
+        else saveLocalData();
+        
+        document.getElementById('set-api-url').value = state.settings.apiUrl || '';
+        document.getElementById('set-deck-size').value = state.deckSize || 4;
+        updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE");
+      }
+
+      function saveLocalData() {
+        localStorage.setItem('infinite_shelf_db', JSON.stringify(state));
+        renderAll();
+      }
+
+      function updateStatus(msg) {
+        const el = document.getElementById('status-indicator');
+        el.innerText = msg;
+        el.style.color = msg.includes("SYNC") ? "var(--blue)" : "var(--dim)";
+      }
+
+      // --- BULK INGEST LOGIC ---
+      
+      function createSelect(options, selected) {
+        let html = '';
+        options.forEach(opt => {
+            html += `<option value="${opt}" ${opt===selected?'selected':''}>${opt}</option>`;
+        });
+        return html;
+      }
+
+      function addIngestRow(data = null) {
+        const container = document.getElementById('ingest-rows-container');
+        const div = document.createElement('div');
+        div.className = 'ingest-row';
+        
+        const defBrand = data ? data.brand : (state.config.brands[0] || '');
+        const defMat = data ? data.material : (state.config.materials[0] || '');
+        const defCol = data ? data.color : (state.config.colors[0] || '');
+        const defPrice = data ? data.price : '';
+        
+        div.innerHTML = `
+            <select class="i-brand">${createSelect(state.config.brands, defBrand)}</select>
+            <select class="i-mat">${createSelect(state.config.materials, defMat)}</select>
+            <select class="i-col">${createSelect(state.config.colors, defCol)}</select>
+            <input type="number" class="i-price" placeholder="0.00" value="${defPrice}" step="0.01">
+            <input type="number" class="i-qty" value="1" min="1" style="text-align:center">
+            <div style="display:flex; gap:5px;">
+                <button class="btn btn-sm btn-icon" onclick="duplicateRow(this)" title="Duplicate">📋</button>
+                <button class="btn btn-sm btn-icon btn-del" onclick="removeRow(this)" title="Remove">X</button>
+            </div>
+        `;
+        container.appendChild(div);
+      }
+
+      function removeRow(btn) {
+        btn.closest('.ingest-row').remove();
+      }
+
+      function duplicateRow(btn) {
+        const row = btn.closest('.ingest-row');
+        const data = {
+            brand: row.querySelector('.i-brand').value,
+            material: row.querySelector('.i-mat').value,
+            color: row.querySelector('.i-col').value,
+            price: row.querySelector('.i-price').value
+        };
+        addIngestRow(data);
+      }
+
+      function submitBulkIngest() {
+        const rows = document.querySelectorAll('.ingest-row');
+        const newItems = [];
+        
+        rows.forEach(row => {
+            const brand = row.querySelector('.i-brand').value;
+            const material = row.querySelector('.i-mat').value;
+            const color = row.querySelector('.i-col').value;
+            const price = parseFloat(row.querySelector('.i-price').value) || 0;
+            const qty = parseInt(row.querySelector('.i-qty').value) || 1;
+            
+            // Create N copies for Qty
+            for(let i=0; i<qty; i++) {
+                newItems.push({
+                    uuid: Date.now().toString() + Math.random().toString(36).substr(2,5),
+                    brand, material, color, price,
+                    initial_weight: 1000, current_weight: 1000, status: 'Unused',
+                    date_added: new Date().toISOString()
+                });
+            }
+        });
+
+        if(newItems.length === 0) return alert("No items to add");
+
+        performAction('batchAddSpools', newItems, { uuids: newItems.map(x => x.uuid) });
+        
+        // Reset Form
+        document.getElementById('ingest-rows-container').innerHTML = '';
+        addIngestRow(); // Add one empty row back
+        alert(`Successfully added ${newItems.length} spools.`);
+      }
+
+      // --- TRANSACTION ENGINE (UNDO/REDO) ---
+      
+      function performAction(type, data, reverseData) {
+        futureStack = []; 
+        historyStack.push({ type, data, reverseData });
+        if(historyStack.length > 20) historyStack.shift(); 
+        executeSync(type, data);
+        updateUndoUI();
+      }
+
+      function triggerUndo() {
+        if(historyStack.length === 0) return;
+        const action = historyStack.pop();
+        futureStack.push(action);
+        
+        let inverseType = '';
+        if(action.type === 'addSpool') inverseType = 'deleteSpool';
+        else if(action.type === 'deleteSpool') inverseType = 'addSpool';
+        else if(action.type === 'updateSpool') inverseType = 'updateSpool';
+        else if(action.type === 'batchAddSpools') inverseType = 'batchDeleteSpools'; // Inverse of Batch Add
+        else if(action.type === 'batchDeleteSpools') inverseType = 'batchAddSpools';
+        else if(action.type === 'addConfig') inverseType = 'removeConfig';
+        else if(action.type === 'removeConfig') inverseType = 'addConfig';
+
+        executeSync(inverseType, action.reverseData);
+        updateUndoUI();
+      }
+
+      function triggerRedo() {
+        if(futureStack.length === 0) return;
+        const action = futureStack.pop();
+        historyStack.push(action);
+        executeSync(action.type, action.data);
+        updateUndoUI();
+      }
+
+      function updateUndoUI() {
+        const uBtn = document.getElementById('btn-undo');
+        const rBtn = document.getElementById('btn-redo');
+        if(historyStack.length > 0) uBtn.classList.remove('disabled'); else uBtn.classList.add('disabled');
+        if(futureStack.length > 0) rBtn.classList.remove('disabled'); else rBtn.classList.add('disabled');
+      }
+
+      // Executes logic LOCALLY then syncs to CLOUD
+      async function executeSync(type, data) {
+        if(type === 'addSpool') {
+            state.inventory.push(data);
+        } else if (type === 'updateSpool') {
+            const item = state.inventory.find(i => i.uuid == data.uuid);
+            if(item) { item.current_weight = data.weight; item.status = data.status; }
+        } else if (type === 'deleteSpool') {
+            state.inventory = state.inventory.filter(i => i.uuid != data.uuid);
+        } else if (type === 'batchAddSpools') {
+            // Spread the array into inventory
+            state.inventory.push(...data);
+        } else if (type === 'batchDeleteSpools') {
+            // Remove all UUIDs present in data.uuids
+            state.inventory = state.inventory.filter(i => !data.uuids.includes(i.uuid));
+        } else if (type === 'addConfig') {
+            state.config[data.type].push(data.value);
+        } else if (type === 'removeConfig') {
+            state.config[data.type] = state.config[data.type].filter(v => v !== data.value);
+        }
+
+        saveLocalData();
+
+        // 2. CLOUD SYNC
+        const url = state.settings.apiUrl;
+        if(url) {
+            updateStatus("SYNCING...");
+            try {
+                await fetch(url, {
+                    method: 'POST',
+                    redirect: 'follow',
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body: JSON.stringify({ action: type, data: data })
+                });
+                updateStatus("SYNC COMPLETE");
+            } catch(e) {
+                console.error(e);
+                updateStatus("SYNC ERROR");
+            }
+        }
+      }
+
+      // --- SEARCH LOGIC ---
+      function handleSearch(val) {
+        searchQuery = val.toLowerCase();
+        // Automatically navigate to dashboard if not already there
+        const dashboardView = document.getElementById('view-dashboard');
+        if (!dashboardView.classList.contains('active') && searchQuery.length > 0) {
+            nav('dashboard');
+        }
+        renderDashboard();
+      }
+
+      function filterItems(items) {
+        if(!searchQuery) return items;
+        return items.filter(i => 
+            i.brand.toLowerCase().includes(searchQuery) || 
+            i.material.toLowerCase().includes(searchQuery) || 
+            i.color.toLowerCase().includes(searchQuery)
+        );
+      }
+
+      // --- RENDER LOGIC ---
+      function renderAll() {
+        renderDashboard();
+        renderFinancials();
+        renderLogs();
+        renderSettings();
+      }
+
+      function renderDashboard() {
+        // Metrics calculated on ALL items, not just filtered
+        let totalVal = 0, totalMass = 0;
+        state.inventory.forEach(i => {
+            if(i.status !== 'Spent') {
+                totalVal += i.price * (i.current_weight / i.initial_weight);
+                totalMass += i.current_weight;
+            }
+        });
+        document.getElementById('m-val').innerText = totalVal.toFixed(2);
+        document.getElementById('m-mass').innerText = (totalMass/1000).toFixed(2);
+
+        const deck = document.getElementById('active-deck');
+        deck.innerHTML = '';
+        deck.style.gridTemplateColumns = `repeat(${state.deckSize || 4}, 1fr)`;
+
+        // FILTERED ACTIVE ITEMS
+        const allActive = state.inventory.filter(i => i.status === 'Active');
+        const displayActive = filterItems(allActive); // Only show what matches search
+        
+        for(let i=0; i<(state.deckSize || 4); i++) {
+          renderSlot(deck, displayActive[i] || null);
+        }
+
+        const grid = document.getElementById('warehouse-grid');
+        grid.innerHTML = '';
+        
+        // GROUPING LOGIC (Apply search filter BEFORE grouping)
+        const warehouseItems = state.inventory.filter(i => ['Unused', 'Partial'].includes(i.status));
+        const filteredWarehouse = filterItems(warehouseItems);
+
+        const groups = {};
+        filteredWarehouse.forEach(item => {
+            const key = `${item.brand}|${item.material}|${item.color}`;
+            if(!groups[key]) groups[key] = [];
+            groups[key].push(item);
+        });
+
+        Object.keys(groups).forEach(key => {
+            const items = groups[key];
+            const [brand, material, color] = key.split('|');
+            const totalWt = items.reduce((sum, i) => sum + i.current_weight, 0);
+            const hasPartial = items.some(i => i.status === 'Partial');
+            const totalInitWt = items.reduce((sum, i) => sum + i.initial_weight, 0);
+            const avgCost = totalInitWt ? (items.reduce((sum, i) => sum + i.price, 0) / (totalInitWt/1000)) : 0;
+
+            const div = document.createElement('div');
+            div.className = hasPartial ? 'card card-partial' : 'card card-highlight';
+            div.innerHTML = `
+                <div class="flex" style="justify-content:space-between;">
+                    <div class="tag mono" style="font-size:10px; background:#333; padding:2px 5px;">QTY: ${items.length}</div>
+                    <div class="mono" style="font-size:10px; color:var(--dim);">$${avgCost.toFixed(2)}/kg</div>
+                </div>
+                <div class="mono" style="font-weight:bold; font-size:18px; margin-top:10px;">${color}</div>
+                <div class="mono" style="margin-bottom:10px; color:var(--dim);">${brand} ${material}</div>
+                <div style="font-size:12px; margin-bottom:15px; color:var(--accent);">Total: ${(totalWt/1000).toFixed(2)}kg</div>
+                <div class="flex" style="gap:5px;">
+                    <button class="btn btn-sm" style="flex:1;" onclick="loadStacked('${key}')">LOAD 1 TO DECK</button>
+                    <button class="btn btn-sm" style="width:auto;" onclick="toggleStackView(this)">MANAGE</button>
+                </div>
+                <div class="stack-overlay">
+                    <div class="header-s" style="margin-bottom:10px; display:flex; justify-content:space-between;">
+                        <span>MANAGE SPOOLS</span><span style="cursor:pointer;" onclick="toggleStackView(this.parentElement.parentElement)">X</span>
+                    </div>
+                    <div style="overflow-y:auto; flex:1;">
+                        ${items.map(i => `<div class="stack-item"><span>${i.status} (${i.current_weight}g)</span><span class="btn-del" style="cursor:pointer;" onclick="deleteSpool('${i.uuid}')">DEL</span></div>`).join('')}
+                    </div>
+                </div>
+            `;
+            grid.appendChild(div);
+        });
+      }
+
+      function renderSlot(container, item) {
+        const div = document.createElement('div');
+        if(!item) {
+          div.className = 'slot'; div.innerHTML = `<div style="margin:auto; color:#333; font-size:10px;">EMPTY SLOT</div>`;
+        } else {
+          const isLow = item.current_weight < 200;
+          const pct = (item.current_weight / item.initial_weight) * 100;
+          div.className = `slot active ${isLow ? 'low-stock' : ''}`;
+          div.innerHTML = `
+            <div><div class="header-s">${item.brand}</div><div class="mono" style="font-weight:bold; font-size:13px;">${item.color} ${item.material}</div></div>
+            <div>
+              <div class="flex" style="justify-content:space-between; font-size:10px;"><span>${item.current_weight}g</span>${isLow ? '<span style="color:var(--alert)">LOW</span>' : ''}</div>
+              <div class="progress-bg"><div class="progress-fill" style="width:${pct}%"></div></div>
+              <div style="display:flex; gap:5px;"><button class="btn btn-sm" style="flex:1;" onclick="useFilament('${item.uuid}', ${item.current_weight})">USE</button><button class="btn btn-sm" onclick="setStatus('${item.uuid}', 'Partial')">⬇</button></div>
+            </div>`;
+        }
+        container.appendChild(div);
+      }
+
+      function renderLogs() {
+        const tbody = document.getElementById('logs-table');
+        const logs = state.inventory.filter(i => i.status === 'Spent').sort((a,b) => new Date(b.date_added) - new Date(a.date_added));
+        
+        if(logs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:20px;">NO SPENT SPOOLS FOUND</td></tr>`;
+        } else {
+            tbody.innerHTML = logs.map(i => `<tr><td>${i.date_added.split('T')[0]}</td><td>${i.brand}</td><td>${i.material}</td><td>${i.color}</td><td>$${i.price}</td></tr>`).join('');
+        }
+      }
+
+      function renderFinancials() {
+        let totalSpend = 0;
+        let consumedCount = 0;
+        const monthly = {};
+        state.inventory.forEach(i => {
+            totalSpend += i.price;
+            if(i.status === 'Spent') consumedCount++;
+            const d = new Date(i.date_added);
+            if(!isNaN(d)) {
+                const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+                if(!monthly[key]) monthly[key] = { spend: 0, mass: 0 };
+                monthly[key].spend += i.price;
+                monthly[key].mass += i.initial_weight;
+            }
+        });
+        document.getElementById('fin-total-spend').innerText = totalSpend.toFixed(2);
+        document.getElementById('fin-current-val').innerText = document.getElementById('m-val').innerText;
+        document.getElementById('fin-consumed').innerText = consumedCount;
+        document.getElementById('finance-table').innerHTML = Object.keys(monthly).sort().reverse().map(k => `<tr><td>${k}</td><td class="mono">$${monthly[k].spend.toFixed(2)}</td><td class="mono">${(monthly[k].mass/1000).toFixed(1)}kg</td></tr>`).join('');
+      }
+
+      // --- USER ACTIONS ---
+      
+      function setStatus(uuid, status) {
+        const item = state.inventory.find(i => i.uuid == uuid);
+        if(item) {
+            const before = { uuid: item.uuid, weight: item.current_weight, status: item.status };
+            const after = { uuid: item.uuid, weight: item.current_weight, status: status };
+            performAction('updateSpool', after, before);
+        }
+      }
+
+      function useFilament(uuid, current) {
+        const amount = prompt("Grams used?", "50");
+        if(amount) {
+          const used = parseInt(amount);
+          const newW = Math.max(0, current - used);
+          const status = newW === 0 ? 'Spent' : 'Active';
+          
+          const item = state.inventory.find(i => i.uuid == uuid);
+          const before = { uuid: item.uuid, weight: item.current_weight, status: item.status };
+          const after = { uuid: item.uuid, weight: newW, status: status };
+          
+          performAction('updateSpool', after, before);
+        }
+      }
+
+      function deleteSpool(uuid) {
+        const item = state.inventory.find(i => i.uuid == uuid);
+        if(item && confirm("Permanently delete this spool?")) {
+            performAction('deleteSpool', { uuid: uuid }, item);
+        }
+      }
+
+      function loadStacked(key) {
+        const items = state.inventory.filter(i => `${i.brand}|${i.material}|${i.color}` === key && ['Partial', 'Unused'].includes(i.status));
+        items.sort((a,b) => (a.status === 'Partial' ? -1 : 1));
+        if(items.length > 0) setStatus(items[0].uuid, 'Active');
+      }
+
+      // --- SETTINGS ---
+      function addConf(type) {
+        const val = document.getElementById(`add-${type}-val`).value;
+        if(val) {
+            document.getElementById(`add-${type}-val`).value = '';
+            performAction('addConfig', { type, value: val }, { type, value: val });
+        }
+      }
+      function delConf(type, val) {
+        if(confirm(`Remove ${val}?`)) {
+            performAction('removeConfig', { type, value: val }, { type, value: val });
+        }
+      }
+      function saveApiUrl() { state.settings.apiUrl = document.getElementById('set-api-url').value; saveLocalData(); updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE"); }
+      function updateDeckSize() { state.deckSize = parseInt(document.getElementById('set-deck-size').value); saveLocalData(); }
+      function forceSync() { const url = state.settings.apiUrl; if(!url) return alert("Enter URL"); updateStatus("SYNCING..."); fetch(url).then(res => res.json()).then(d => { state.inventory=d.inventory; state.config=d.config; saveLocalData(); updateStatus("SYNC COMPLETE"); }).catch(e => { updateStatus("SYNC FAILED"); alert("Check URL/Permissions"); }); }
+
+      // --- UI HELPERS ---
+      function nav(viewName) {
+        document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+        document.getElementById(`view-${viewName}`).classList.add('active');
+      }
+      function toggleStackView(el) {
+        let overlay;
+        if(el.tagName === 'BUTTON') overlay = el.parentElement.parentElement.querySelector('.stack-overlay');
+        else overlay = el; 
+        if(overlay) overlay.classList.toggle('show');
+      }
+      function renderIngestOptions() { 
+          // Handled dynamically in addIngestRow
+      }
+      function renderSettings() { 
+          renderConfigList('list-brands', state.config.brands, 'brands'); 
+          renderConfigList('list-materials', state.config.materials, 'materials'); 
+          renderConfigList('list-colors', state.config.colors, 'colors'); 
+      }
+      function renderConfigList(divId, dataArr, type) { 
+          const div = document.getElementById(divId); div.innerHTML = ''; 
+          if(dataArr) dataArr.forEach(txt => { div.innerHTML += `<div class="setting-row"><span class="mono" style="font-size:12px;">${txt}</span><button class="btn-del" onclick="delConf('${type}', '${txt}')">DEL</button></div>`; }); 
+      }
+    </script>
+  </body>
+</html>
