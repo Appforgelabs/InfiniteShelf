@@ -550,19 +550,27 @@ function removeConfigItem(type, value) {
         addIngestRow(); // Start with one row
         renderAll();
         document.getElementById('loader').style.display = 'none';
-        if(state.settings.apiUrl) forceSync();
+        if(state.settings && state.settings.apiUrl) forceSync();
         updateUndoUI();
       };
 
       // --- DATA MANAGER ---
       function loadLocalData() {
         const stored = localStorage.getItem('infinite_shelf_db');
-        if(stored) state = JSON.parse(stored);
-        else saveLocalData();
+        if(stored) {
+            const parsed = JSON.parse(stored);
+            // MERGE WITH DEFAULT TO FIX MISSING FIELDS
+            state = { ...defaultState, ...parsed };
+            // DEEP MERGE CONFIG & SETTINGS if they exist in parsed, else use default
+            if(parsed.config) state.config = { ...defaultState.config, ...parsed.config };
+            if(parsed.settings) state.settings = { ...defaultState.settings, ...parsed.settings };
+        } else {
+            saveLocalData();
+        }
         
-        document.getElementById('set-api-url').value = state.settings.apiUrl || '';
+        document.getElementById('set-api-url').value = (state.settings && state.settings.apiUrl) || '';
         document.getElementById('set-deck-size').value = state.deckSize || 4;
-        updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE");
+        updateStatus((state.settings && state.settings.apiUrl) ? "CLOUD SYNC ENABLED" : "LOCAL MODE");
       }
 
       function saveLocalData() {
@@ -724,7 +732,7 @@ function removeConfigItem(type, value) {
         saveLocalData();
 
         // 2. CLOUD SYNC
-        const url = state.settings.apiUrl;
+        const url = state.settings ? state.settings.apiUrl : null;
         if(url) {
             updateStatus("SYNCING...");
             try {
@@ -946,9 +954,14 @@ function removeConfigItem(type, value) {
             performAction('removeConfig', { type, value: val }, { type, value: val });
         }
       }
-      function saveApiUrl() { state.settings.apiUrl = document.getElementById('set-api-url').value; saveLocalData(); updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE"); }
+      function saveApiUrl() { 
+          if(!state.settings) state.settings = {}; 
+          state.settings.apiUrl = document.getElementById('set-api-url').value; 
+          saveLocalData(); 
+          updateStatus(state.settings.apiUrl ? "CLOUD SYNC ENABLED" : "LOCAL MODE"); 
+      }
       function updateDeckSize() { state.deckSize = parseInt(document.getElementById('set-deck-size').value); saveLocalData(); }
-      function forceSync() { const url = state.settings.apiUrl; if(!url) return alert("Enter URL"); updateStatus("SYNCING..."); fetch(url).then(res => res.json()).then(d => { state.inventory=d.inventory; state.config=d.config; saveLocalData(); updateStatus("SYNC COMPLETE"); }).catch(e => { updateStatus("SYNC FAILED"); alert("Check URL/Permissions"); }); }
+      function forceSync() { const url = state.settings ? state.settings.apiUrl : null; if(!url) return alert("Enter URL"); updateStatus("SYNCING..."); fetch(url).then(res => res.json()).then(d => { state.inventory=d.inventory; state.config=d.config; saveLocalData(); updateStatus("SYNC COMPLETE"); }).catch(e => { updateStatus("SYNC FAILED"); alert("Check URL/Permissions"); }); }
 
       // --- HELPERS ---
       function copyCode() {
